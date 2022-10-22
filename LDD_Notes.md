@@ -1,11 +1,45 @@
 ## Frage a
 
-Ein Kernel-Modul muss so gut wie immer andere Funktionen aus dem Kernel aufrufen.
-Der Code, der zum aufrufen der Funktionen notwendig ist hängt von der Signatur der Funktion und den calling conventions ab.
-Dieses Interface auf binärebene wird als [ABI](https://en.wikipedia.org/wiki/Application_binary_interface) bezeichnet.
-Da der Linux Kernel keine stabile ABI aufweist, kann es zu Problemen kommen, wenn ein Modul eine Funktion mit falschen Parametern aufruft.
+### API und ABI
 
-Um solche Probleme zu vermeiden wird geprüft, ob das Modul genau für den korrekten Kernel kompiliert wurde.
+Für Kompatibilität zwischen zwei Programmen sind zwei Schnittstellen wichtig.
+
+Die [API](https://en.wikipedia.org/wiki/API) (Application Programming Interface, Programmierschnittstelle)
+definiert dabei die Schnittstelle auf Sourcecode-Level.
+
+Dazu zählen z.B. die Funktionsnamen, Anzahl und Reihenfolge der Parameter. Auch
+Name und Datentyp von Feldern in Strukturen sind Teil der API. Einige andere
+Änderungen (z.B. Reihenfolge von Feldern in Strukturen) können vorgenommen
+werden, ohne die API zu ändern, da diese Information für den Sourcecode nicht
+wichtig ist.
+
+
+Die [ABI](https://en.wikipedia.org/wiki/Application_binary_interface)
+(Application Binary Interface, Binärschnittstelle) definiert die Schnittstelle zwischen den
+kompilierten Programmen.
+
+Ein wichtiger Teil der ABI sind calling-conventions, die bestimmen, wie Daten an
+Funktionen übergeben und zurück gegeben werden.
+Hier werden auch Faktoren, wie das Layout einer Struktur relevant.
+
+### stabile API und ABI
+
+Unter einer Stabilen API versteht man ein Interface, das sich im Sourcecode nur
+so ändert, dass alter Code noch kompiliert werden kann.
+
+Unter einer Stabilen ABI versteht man ein Interface, wo sich auch die ABI nicht
+ändert und dadurch auch bereits kompilierte Programme diese Funktion aufrufen
+können.
+
+### Im Linux Kernel
+
+Schnittstellen innerhalb des Linux Kernels haben weder eine stabile API noch
+ABI. Daher können Module, die für eine Version des Kernels kompiliert werden nur
+für diese verwendet werden.
+
+Ist ein Modul im Kernel Repo aufgenommen (mainlined), wird notwendige Wartung
+zum einhalten geänderter Schnittstellen von demjenigen, der die Schnittstelle
+ändert übernommen.
 
 ## Frage b
 
