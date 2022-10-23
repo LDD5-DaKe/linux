@@ -470,7 +470,9 @@ config LED_PWM
 	tristate "PWM LED Driver for LEDDimmable"
 	help
 	  This driver provides support for the PWM Module in the extended
-	  DE1-SoC Computer FPGA
+	  DE1-SoC Computer FPGA. It will show the lower 8 lights on full
+      brightness for 3 seconds, afterwards display a running light
+      until unloaded.
 
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"

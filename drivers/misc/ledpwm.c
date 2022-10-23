@@ -23,7 +23,7 @@
 #define STARTUP_DELAY 3000
 #define TIMER_DELAY 125
 
-static void __iomem *led_regs = NULL;
+static void __iomem *led_regs;
 
 /**
  * callback to execute when the timer elapses
@@ -127,6 +127,7 @@ static int __init led_pwm_init(void)
 static void __exit led_pwm_exit(void)
 {
 	int i;
+
 	printk(KERN_INFO "Unloading PWM Driver\n");
 
 	// stop the timer -> otherwise kernel panic :-)
