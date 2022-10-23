@@ -76,3 +76,56 @@ vermagic:       5.4.69 SMP mod_unload ARMv7 p2v8
   wurde, diese beinhaltet die kernel version, wichtige Informationen zur
   Konfiguration (preempt, module unload support) und der Architektur (ARMv7).
   Dieser String wird in `include/linux/vermagic.h` als `VERMAGIC_STRING` definiert.
+
+## Frage c
+
+Der DE1-SoC-Computer ist ein System mit ARM-Architektur. Speicher und
+Peripherals werden in einem Adressraum abgebildet. Die Kernel-Schnittstelle
+_I/O-Memory_ wird verwendet um auf in den Addressraum liegende Memory-Mapped
+Hardware-Peripherien Adressraum direkt zuzugreifen.
+
+Die Kernel-Schnittstelle _I/O-Ports_ wird verwendet, wenn auf einen separaten
+Adressraum zugegriffen wird. Dies ist z.B. bei x86-Architekturen erforderlich.
+
+Es gilt allerdings zu beachten, dass _I/O-Memory_ nur RAM-Ähnlich ist. Neben
+CPU-spezifischen Eigenschaften wie Caching gilt es auch auf die tatsächliche
+Implementierung der Hardware zu achten (read/write-only, clear on read/write,
+Bus-Stalls, ...).
+
+## Frage d
+
+### Virtueller Speicher
+Um mehrere Prozesse gleichzeitig auf einem System laufen zu lassen, ohne diese
+mit den prozess-spezifischen tatsächlichen Adressen für Code/Daten vor dem
+Start des Prozesses zu linken abstrahiert das Betriebssystem den physischen
+Speicher.
+
+So kann jeder Prozess unabhängig voneinander auf eigenen Speicher zugreifen.
+Dies bringt weitere Vorteile:
+ - Integrität: Ein Prozess kann nicht ohne weiteres auf Speicher eines anderen
+   Prozesses zugreifen.
+ - Swapping: Es muss nicht zu jeder Zeit der gesamte Speicher eines Prozesses vollständig
+   verfügbar sein. Nicht benötigte Speicherbereiche können ausgelagert werden, um
+   Speicher für andere aktive Prozesse zu schaffen.
+
+### Auswirkung des virtuellen Speichers
+Da das Betriebssystem bei einem Speicherzugriff normalerweise eine Umsetzung auf die
+physische Adresse durchführen muss, muss dies beim Zugriff auf Hardware-Peripherien
+umgangen werden.
+
+#### Initialisierung
+Dazu muss der Speicher zuerst mit der Funktion `request_mem_region()` reserviert werden.
+
+Mit der Funktion `ioremap()` mapped das Betriebssystem den Speicher in den virtuellen
+Speicher.
+
+#### Zugriff
+Der tatsächliche Zugriff auf den Speicher erfolgt dann mit den
+Funktionen `iowrite()` zum Schreiben und `ioread()` zum Lesen (kein direkter
+Pointerzugriff erlaubt, da dieser Zugriff hardwarespezifisch ist).
+
+#### Freigabe
+Zum Freigeben des angeforderten Speichers muss zuerst mit der Funktion `iounmap()`
+das Remapping entfernt werden. Anschließend kann die Speicherregion mit der
+Funktion `release_mem_region()` wieder freigegeben werden.
+
