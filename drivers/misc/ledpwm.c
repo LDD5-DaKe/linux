@@ -1,4 +1,4 @@
-// LPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * Demo Driver for the PWM Module in the DE1-SoC Computer System
  * Initializes the LEDs with a default pattern and then runs a test
