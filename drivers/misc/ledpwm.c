@@ -49,9 +49,8 @@ static int set_led(size_t __iomem *reg_base, int ledNr, uint32_t value);
 
 #define CDEV_MAX_USERDATA 100
 
-#define PWM_CONVERSION_FACTOR (u32)(PWM_MAX / CDEV_MAX_USERDATA)
-#define TO_PWM_VALUE(x) ((x)*PWM_CONVERSION_FACTOR)
-#define FROM_PWM_VALUE(x) (u8)((x) / PWM_CONVERSION_FACTOR)
+#define TO_PWM_VALUE(x) ((x)*PWM_MAX / CDEV_MAX_USERDATA)
+#define FROM_PWM_VALUE(x) (u8)((x) * CDEV_MAX_USERDATA / PWM_MAX)
 
 // -----------------------------------------------------------------
 // Timer configuration
@@ -333,7 +332,7 @@ int set_led(u32 __iomem *reg_base, int ledNr, uint32_t value)
 	if (value > PWM_MAX)
 		return -EINVAL;
 
-	iowrite32(value, (void *)reg_base + ledNr * sizeof(u32));
+	iowrite32(value, reg_base + ledNr);
 
 	return 0;
 }
