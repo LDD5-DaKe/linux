@@ -44,6 +44,7 @@ static int set_led(size_t __iomem *reg_base, int ledNr, uint32_t value);
 // PWM Channel definitions for the character device
 #define CDEV_PWM_REG_BASE (PWM_REG_BASE + PWM_NUM_CHANNELS * sizeof(u32))
 #define CDEV_PWM_REG_SIZE (sizeof(u32))
+#define CDEV_MAX_USERDATA 100
 
 #define PWM_CONVERSION_FACTOR (u32)(PWM_MAX / 100)
 #define TO_PWM_VALUE(x) ((x)*PWM_CONVERSION_FACTOR)
@@ -78,7 +79,7 @@ static int ledpwm_open(struct inode *inode, struct file *filep)
 	struct ledpwm *data = container_of(inode->i_cdev, struct ledpwm, cdev);
 	filep->private_data = data;
 
-	printk(KERN_INFO "In ledpwm_open");
+	printk(KERN_INFO "In ledpwm_open\n");
 
 	return 0;
 }
@@ -88,7 +89,8 @@ static ssize_t ledpwm_read(struct file *filep, char __user *buf, size_t count,
 {
 	u8 pwm_channel;
 	struct ledpwm *data = filep->private_data;
-	printk(KERN_INFO "In ledpwm_read, count: %d, offp: %lld", count, *offp);
+	printk(KERN_INFO "In ledpwm_read, count: %d, offp: %lld\n", count,
+	       *offp);
 
 	// if the byte has already been copied to the userspace
 	if (*offp >= 1)
@@ -103,7 +105,7 @@ static ssize_t ledpwm_read(struct file *filep, char __user *buf, size_t count,
 
 	// copy_to_user returns uncopied bytes, if not 0, an error occurred
 	if (copy_to_user(buf, &pwm_channel, 1)) {
-		printk(KERN_ERR "unable to copy data to userspace");
+		printk(KERN_ERR "unable to copy data to userspace\n");
 		return -EFAULT;
 	}
 
@@ -119,18 +121,27 @@ static ssize_t ledpwm_write(struct file *filep, const char __user *buf,
 
 	size_t bytes_written = 0;
 	struct ledpwm *data = filep->private_data;
-	printk(KERN_INFO "In ledpwm_write, count: %d, offp: %lld", count,
+	printk(KERN_INFO "In ledpwm_write, count: %d, offp: %lld\n", count,
 	       *offp);
 
 	for (bytes_written = 0; bytes_written < count;) {
-		if (copy_from_user(&userdata, buf, 1)) {
-			printk(KERN_ERR "unable to copy data from userspace");
+		// load the current byte from the userspace
+		// (bulk transfer would be more efficient)
+		if (copy_from_user(&userdata, &(buf[bytes_written]), 1)) {
+			printk(KERN_ERR "unable to copy data from userspace\n");
 			return -EFAULT;
 		}
 
-        set_led(data->led_regs, 0, TO_PWM_VALUE(userdata));
+		// verify that the received userdata is valid
+		if (userdata > CDEV_MAX_USERDATA)
+			printk(KERN_WARNING
+			       "received invalid userdata: %d, will skip this value",
+			       userdata);
+		else
+			// set the value
+			set_led(data->led_regs, 0, TO_PWM_VALUE(userdata));
 
-        // wait for 200ms if there are more bytes to write
+		// wait for 200ms if there are more bytes to write
 		if (++bytes_written < count)
 			mdelay(MULTIPLE_WRITE_DELAY);
 	}
@@ -181,7 +192,7 @@ static int map_registers(resource_size_t const base, resource_size_t const size,
 	goto end;
 
 release:
-	release_mem_region(PWM_REG_BASE, PWM_REG_SIZE);
+	release_mem_region(base, size);
 
 end:
 	return ret;
@@ -216,7 +227,7 @@ static int setup_char_dev(void)
 			       &(device_data.led_regs));
 	if (status != 0) {
 		printk(KERN_ERR
-		       "Unable to map pwm channel for the character device");
+		       "Unable to map pwm channel for the character device\n");
 		goto exit;
 	}
 
@@ -247,7 +258,7 @@ static int setup_char_dev(void)
 	}
 
 	cdev_device = device_create(cdev_class, NULL, device_number,
-				    &device_data, "demo");
+				    &device_data, "ledpwm");
 
 	if (IS_ERR(cdev_device)) {
 		printk(KERN_ERR "Unable to create device\n");
@@ -275,7 +286,7 @@ exit:
 	return status;
 }
 
-static void __exit remove_char_dev(void)
+static void remove_char_dev(void)
 {
 	// remove device file
 	device_destroy(cdev_class, device_number);
@@ -285,8 +296,12 @@ static void __exit remove_char_dev(void)
 	cdev_del(&device_data.cdev);
 	unregister_chrdev_region(device_number, 1);
 
-    // unmap the pwm channel
-    unmap_registers(CDEV_PWM_REG_BASE, CDEV_PWM_REG_SIZE, &device_data.led_regs);
+	// switch off the led
+	set_led(device_data.led_regs, 0, 0);
+
+	// unmap the pwm channel
+	unmap_registers(CDEV_PWM_REG_BASE, CDEV_PWM_REG_SIZE,
+			&device_data.led_regs);
 }
 
 /**
@@ -298,7 +313,7 @@ static void __exit remove_char_dev(void)
  *
  * @return -EINVAL if ledNr or value are invalid, 0 otherwise
  */
-int set_led(size_t __iomem *reg_base, int ledNr, uint32_t value)
+int set_led(u32 __iomem *reg_base, int ledNr, uint32_t value)
 {
 	if (reg_base == NULL)
 		return -EINVAL;
@@ -309,7 +324,7 @@ int set_led(size_t __iomem *reg_base, int ledNr, uint32_t value)
 	if (value > PWM_MAX)
 		return -EINVAL;
 
-	iowrite32(value, reg_base + ledNr * sizeof(u32));
+	iowrite32(value, (void *)reg_base + ledNr * sizeof(u32));
 
 	return 0;
 }
@@ -381,7 +396,7 @@ static void __exit led_pwm_exit(void)
 	for (i = 0; i < PWM_NUM_CHANNELS; i++)
 		set_led(led_regs, i, 0);
 
-    remove_char_dev();
+	remove_char_dev();
 	unmap_registers(PWM_REG_BASE, PWM_REG_SIZE, &led_regs);
 }
 
