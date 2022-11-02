@@ -42,11 +42,14 @@ static int set_led(size_t __iomem *reg_base, int ledNr, uint32_t value);
 
 // -----------------------------------------------------------------
 // PWM Channel definitions for the character device
-#define CDEV_PWM_REG_BASE (PWM_REG_BASE + PWM_NUM_CHANNELS * sizeof(u32))
+
+#define CDEV_PWM_CHANNEL 9
+#define CDEV_PWM_REG_BASE (PWM_REG_BASE + CDEV_PWM_CHANNEL * sizeof(u32))
 #define CDEV_PWM_REG_SIZE (sizeof(u32))
+
 #define CDEV_MAX_USERDATA 100
 
-#define PWM_CONVERSION_FACTOR (u32)(PWM_MAX / 100)
+#define PWM_CONVERSION_FACTOR (u32)(PWM_MAX / CDEV_MAX_USERDATA)
 #define TO_PWM_VALUE(x) ((x)*PWM_CONVERSION_FACTOR)
 #define FROM_PWM_VALUE(x) (u8)((x) / PWM_CONVERSION_FACTOR)
 
