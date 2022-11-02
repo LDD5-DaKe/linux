@@ -133,13 +133,16 @@ static ssize_t ledpwm_write(struct file *filep, const char __user *buf,
 		}
 
 		// verify that the received userdata is valid
-		if (userdata > CDEV_MAX_USERDATA)
-			printk(KERN_WARNING
+		if (userdata > CDEV_MAX_USERDATA) {
+			printk(KERN_ERR
 			       "received invalid userdata: %d, will skip this value",
 			       userdata);
-		else
-			// set the value
-			set_led(data->led_regs, 0, TO_PWM_VALUE(userdata));
+			set_led(data->led_regs, 0, 0);
+			return -EINVAL;
+		}
+
+		// set the value
+		set_led(data->led_regs, 0, TO_PWM_VALUE(userdata));
 
 		// wait for 200ms if there are more bytes to write
 		if (++bytes_written < count)
