@@ -80,9 +80,10 @@ static struct device *cdev_device;
 static int ledpwm_open(struct inode *inode, struct file *filep)
 {
 	struct ledpwm *data = container_of(inode->i_cdev, struct ledpwm, cdev);
+
 	filep->private_data = data;
 
-	printk(KERN_INFO "In ledpwm_open\n");
+	printk(KERN_INFO "In %s\n", __func__);
 
 	return 0;
 }
@@ -92,7 +93,8 @@ static ssize_t ledpwm_read(struct file *filep, char __user *buf, size_t count,
 {
 	u8 pwm_channel;
 	struct ledpwm *data = filep->private_data;
-	printk(KERN_INFO "In ledpwm_read, count: %d, offp: %lld\n", count,
+
+	printk(KERN_INFO "In %s, count: %d, offp: %lld\n", __func__, count,
 	       *offp);
 
 	// if the byte has already been copied to the userspace
@@ -121,10 +123,10 @@ static ssize_t ledpwm_write(struct file *filep, const char __user *buf,
 			    size_t count, loff_t *offp)
 {
 	u8 userdata;
-
 	size_t bytes_written = 0;
 	struct ledpwm *data = filep->private_data;
-	printk(KERN_INFO "In ledpwm_write, count: %d, offp: %lld\n", count,
+
+	printk(KERN_INFO "In %s, count: %d, offp: %lld\n", __func__, count,
 	       *offp);
 
 	for (bytes_written = 0; bytes_written < count;) {
@@ -156,7 +158,7 @@ static ssize_t ledpwm_write(struct file *filep, const char __user *buf,
 }
 
 // create the structure with the file pointers
-static struct file_operations fops = {
+static struct file_operations const fops = {
 	.open = ledpwm_open,
 	.read = ledpwm_read,
 	.write = ledpwm_write,
@@ -211,7 +213,8 @@ end:
  *
  * @param size size of the mapped region (in bytes)
  *
- * @param memory [inout] pointer to the remapped memory region, will be set to NULL
+ * @param memory [inout] pointer to the remapped memory region,
+ *               will be set to NULL
  */
 static void unmap_registers(resource_size_t const base, resource_size_t size,
 			    size_t **memory)
