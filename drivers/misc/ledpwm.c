@@ -327,7 +327,7 @@ static ssize_t ledpwm_show_led9_off(struct device *dev,
 	struct ledpwm *data = dev->driver_data;
 	u32 val = ioread32(data->led_regs);
 	// '1' if LED is off
-	buf[0] = val == 0 ? '1':'0';
+	buf[0] = val == 0 ? '1' : '0';
 	// newlines are nice for commandline tools
 	buf[1] = '\n';
 	// terminated string
