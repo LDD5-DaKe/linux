@@ -1,131 +1,71 @@
-## Frage a
+Notizen fuer Uebung02
+===
 
-### API und ABI
+## 1. Character Devices
+### c) Behandlung von Werten ausserhalb des Wertebereichs
 
-Für Kompatibilität zwischen zwei Programmen sind zwei Schnittstellen wichtig.
+Wird ein Wert ausserhalb des Wertebereichs erhalten (> 100), wird
+die Ausgabe der Werte abgebrochen. Die LED wird auf einen sicheren
+Wert (0) zurückgesetzt und dem Userspace wird der Fehlercode `EINVAL`
+rückgegeben.
 
-Die [API](https://en.wikipedia.org/wiki/API) (Application Programming Interface, Programmierschnittstelle)
-definiert dabei die Schnittstelle auf Sourcecode-Level.
+Diese Herangehensweise wurde gewählt, um den Benutzer möglichst laut und
+rasch auf eine falsche Eingabe hinzuweisen.
 
-Dazu zählen z.B. die Funktionsnamen, Anzahl und Reihenfolge der Parameter. Auch
-Name und Datentyp von Feldern in Strukturen sind Teil der API. Einige andere
-Änderungen (z.B. Reihenfolge von Feldern in Strukturen) können vorgenommen
-werden, ohne die API zu ändern, da diese Information für den Sourcecode nicht
-wichtig ist.
+Das Rücksetzen auf einen sicheren Wert ist je nach tatsächlicher Anwendung
+sinnvoll oder gefährlich (z.B. bei der Ansteuerung eines Servo-Motors).
 
+## 3. Verständnisfragen
+### 1. UART-Controller
 
-Die [ABI](https://en.wikipedia.org/wiki/Application_binary_interface)
-(Application Binary Interface, Binärschnittstelle) definiert die Schnittstelle zwischen den
-kompilierten Programmen.
+Die zu kommunizierten Daten werden direkt über die Character-Device
+Schnittstelle ausgetauscht.
 
-Ein wichtiger Teil der ABI sind calling-conventions, die bestimmen, wie Daten an
-Funktionen übergeben und zurück gegeben werden.
-Hier werden auch Faktoren, wie das Layout einer Struktur relevant.
+Beim Schreiben werden die Daten an die Ausgangs-FIFO angefügt. Sollte die FIFO
+voll sein, kann der Fehlercode `EBUSY` retourniert werden, sodass der
+Schreibvorgang später wiederholt wird.
 
-### stabile API und ABI
+Beim Lesen werden die Daten von der Eingangs-FIFO gelesen und in den Userspace
+kopiert (max. Puffergröße).
 
-Unter einer Stabilen API versteht man ein Interface, das sich im Sourcecode nur
-so ändert, dass alter Code noch kompiliert werden kann.
+### 2. PWM-Controller
 
-Unter einer Stabilen ABI versteht man ein Interface, wo sich auch die ABI nicht
-ändert und dadurch auch bereits kompilierte Programme diese Funktion aufrufen
-können.
+#### Schreiben
+Der Schreibzugriff ist strukturiert: der erste Teil der in der write-Funktion
+empfangenen Daten ist die PWM-Kanal-Nummer, der Rest ist der zu setzende Wert
+dieses Kanals.
 
-### Im Linux Kernel
+#### Lesen (optional)
+Sollte es erforderlich sein, die aktuellen Werte zu lesen, werden im
+einfachsten Fall die Werte der Duty-Cycle-Register gemeinsam an den Aufrufer
+übermittelt.
 
-Schnittstellen innerhalb des Linux Kernels haben weder eine stabile API noch
-ABI. Daher können Module, die für eine Version des Kernels kompiliert werden nur
-für diese verwendet werden.
+Ist die Zahl der Kanäle zu groß, könnte zuerst nur die Kanalnummer an die
+Schreib-Schnittstelle übermittelt werden (ohne Wert für den Duty-Cycle). Im
+darauffolgenden Lesezugriff wird der Wert des geforderten Kanals übermittelt.
 
-Ist ein Modul im Kernel Repo aufgenommen (mainlined), wird notwendige Wartung
-zum einhalten geänderter Schnittstellen von demjenigen, der die Schnittstelle
-ändert übernommen.
+### 3. Testbild-Generator
 
-## Frage b
+#### Ein Konfigurationsregister
+Die Bits des übertragenen Bytes haben spezielle Bedeutung (vgl.
+Mikrocontroller). Dies kann in der Schreib-Schnittstelle interpretiert und in
+der Lese-Schnittstelle wieder zusammengebaut werden.
 
-```
-filename:       /home/alex/Documents/Studium/SEM5/LDD/linux/drivers/misc/ledpwm.ko
-author:         Alexander Daum <alexander.daum@mailbox.org>
-description:    Driver for the LED PWM component of the DE1-SoC Computer
-license:        GPL
-depends:
-intree:         Y
-name:           ledpwm
-vermagic:       5.4.69 SMP mod_unload ARMv7 p2v8
-```
+Optional könnte auch eine Bitmaske übergeben werden, welche die zu beachtenden
+Bits kennzeichnet.
 
-* filename: Der komplette Pfad der Datei, Informationen stammt aus dem
-  Dateisystem.
-* author: Der Author des Moduls. Diese Information wird mit dem `MODULE_AUTHOR`
-  Macro im Sourcecode bereitgestellt.
-* license: Die Lizenz des Moduls. Die Information wird aus dem
-  LPDX-License-Identifier Kommentar am Anfang der Datei extrahiert.
-* depends: Abhängigkeiten des Moduls (in diesem Fall keine). Diese werden mit
-  dem `depends on` Keyword in der Kconfig Datei definiert.
-* intree: Zeigt an, ob das Modul im Kernel Source-Tree gebaut wurde, oder
-  außerhalb. Y bedeutet hier ja. Bei einem intree build werden die Quellen des
-  neuen Moduls innerhalb des Kernel Verzeichnisses erstellt und auch direkt in
-  die entsprechenden Kconfig und Makefile Dateien integriert. Bei einem
-  out-of-tree build liegen die Quelldateien für den Treiber in einem separaten
-  Verzeichnis, nicht bei den Kernel sourcen.
-  Diese Information kann das Build-System leicht erkennen, da für einen
-  out-of-tree build die Option M beim make aufruf gesetzt werden muss (Quelle
-  Documentation/kbuild/modules.rst)
-* name: Der Name des Moduls. Dieser Name entspricht dem Namen der Quelldatei.
-* vermagic: Information über die Version des Kernels für die das Modul gebaut
-  wurde, diese beinhaltet die kernel version, wichtige Informationen zur
-  Konfiguration (preempt, module unload support) und der Architektur (ARMv7).
-  Dieser String wird in `include/linux/vermagic.h` als `VERMAGIC_STRING` definiert.
+#### Mehrere Konfigurationsregister
 
-## Frage c
+Ähnlich zum PWM-Controller, Strukturierung des Datenstroms in Addresse +
+Registerwert.
 
-Der DE1-SoC-Computer ist ein System mit ARM-Architektur. Speicher und
-Peripherals werden in einem Adressraum abgebildet. Die Kernel-Schnittstelle
-_I/O-Memory_ wird verwendet um auf in den Addressraum liegende Memory-Mapped
-Hardware-Peripherien Adressraum direkt zuzugreifen.
+#### großer Speicherbereich, Testbild zur Laufzeit konfigurierbar
 
-Die Kernel-Schnittstelle _I/O-Ports_ wird verwendet, wenn auf einen separaten
-Adressraum zugegriffen wird. Dies ist z.B. bei x86-Architekturen erforderlich.
+Bereitstellung von Funktionen zum kompletten Neuschreiben des Speicherbereichs
+oder gezieltem Überschreiben einer Sub-Region, gekennzeichnet durch eine
+Startadresse.
 
-Es gilt allerdings zu beachten, dass _I/O-Memory_ nur RAM-Ähnlich ist. Neben
-CPU-spezifischen Eigenschaften wie Caching gilt es auch auf die tatsächliche
-Implementierung der Hardware zu achten (read/write-only, clear on read/write,
-Bus-Stalls, ...).
-
-## Frage d
-
-### Virtueller Speicher
-Um mehrere Prozesse gleichzeitig auf einem System laufen zu lassen, ohne diese
-mit den prozess-spezifischen tatsächlichen Adressen für Code/Daten vor dem
-Start des Prozesses zu linken abstrahiert das Betriebssystem den physischen
-Speicher.
-
-So kann jeder Prozess unabhängig voneinander auf eigenen Speicher zugreifen.
-Dies bringt weitere Vorteile:
- - Integrität: Ein Prozess kann nicht ohne weiteres auf Speicher eines anderen
-   Prozesses zugreifen.
- - Swapping: Es muss nicht zu jeder Zeit der gesamte Speicher eines Prozesses vollständig
-   verfügbar sein. Nicht benötigte Speicherbereiche können ausgelagert werden, um
-   Speicher für andere aktive Prozesse zu schaffen.
-
-### Auswirkung des virtuellen Speichers
-Da das Betriebssystem bei einem Speicherzugriff normalerweise eine Umsetzung auf die
-physische Adresse durchführen muss, muss dies beim Zugriff auf Hardware-Peripherien
-umgangen werden.
-
-#### Initialisierung
-Dazu muss der Speicher zuerst mit der Funktion `request_mem_region()` reserviert werden.
-
-Mit der Funktion `ioremap()` mapped das Betriebssystem den Speicher in den virtuellen
-Speicher.
-
-#### Zugriff
-Der tatsächliche Zugriff auf den Speicher erfolgt dann mit den
-Funktionen `iowrite()` zum Schreiben und `ioread()` zum Lesen (kein direkter
-Pointerzugriff erlaubt, da dieser Zugriff hardwarespezifisch ist).
-
-#### Freigabe
-Zum Freigeben des angeforderten Speichers muss zuerst mit der Funktion `iounmap()`
-das Remapping entfernt werden. Anschließend kann die Speicherregion mit der
-Funktion `release_mem_region()` wieder freigegeben werden.
+Lesen ist bei dieser Schnittstelle wenig sinnvoll (Konfigurationsdaten werden
+bereits vom Userspace vorgegeben). Die Ausgabe des Testbilds erfolgt
+Hardwaremäßig auf anderem Weg (z.B. über HDMI, direkt aus dem FPGA heraus).
 
