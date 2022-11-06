@@ -50,7 +50,7 @@ static int set_led(size_t __iomem *reg_base, int ledNr, uint32_t value);
 #define CDEV_MAX_USERDATA 100
 
 #define TO_PWM_VALUE(x) ((x)*PWM_MAX / CDEV_MAX_USERDATA)
-#define FROM_PWM_VALUE(x) (u8)((x) * CDEV_MAX_USERDATA / PWM_MAX)
+#define FROM_PWM_VALUE(x) (u8)((x)*CDEV_MAX_USERDATA / PWM_MAX)
 
 // -----------------------------------------------------------------
 // Timer configuration
@@ -75,6 +75,15 @@ static struct ledpwm device_data;
 static dev_t device_number;
 static struct class *cdev_class;
 static struct device *cdev_device;
+
+// -----------------------------------------------------------------
+// sysfs configuration
+
+static ssize_t led9_off_show(struct device *dev,
+				    struct device_attribute *attr, char *buf);
+
+static struct device *sysfs_root_device;
+static DEVICE_ATTR(led9_off, 0444, led9_off_show, NULL);
 
 static int ledpwm_open(struct inode *inode, struct file *filep)
 {
@@ -312,6 +321,50 @@ static void remove_char_dev(void)
 			&device_data.led_regs);
 }
 
+static ssize_t led9_off_show(struct device *dev,
+				    struct device_attribute *attr, char *buf)
+{
+	struct ledpwm *data = dev->driver_data;
+	u32 val = ioread32(data->led_regs);
+	// '1' if LED is off
+	buf[0] = val == 0 ? '1' : '0';
+	// newlines are nice for commandline tools
+	buf[1] = '\n';
+	// terminated string
+	buf[2] = 0;
+	return 2;
+}
+
+static void remove_sysfs_dev(void)
+{
+	sysfs_remove_file(&sysfs_root_device->kobj, &dev_attr_led9_off.attr);
+	root_device_unregister(sysfs_root_device);
+}
+
+static int setup_sysfs(void)
+{
+	int status = 0;
+
+	sysfs_root_device = root_device_register("ldd_ledpwm");
+	if (IS_ERR(sysfs_root_device)) {
+		printk(KERN_ERR "Could not register root device\n");
+		return -EEXIST;
+	}
+	dev_set_drvdata(sysfs_root_device, &device_data);
+	status = sysfs_create_file(&sysfs_root_device->kobj,
+				   &dev_attr_led9_off.attr);
+	if (status) {
+		printk(KERN_ERR "Could not create led9_off file\n");
+		goto remove_rootdev;
+	}
+
+	return 0;
+
+remove_rootdev:
+	root_device_unregister(sysfs_root_device);
+	return status;
+}
+
 /**
  * Set the value (brightness) of a single LED PWM Channel
  *
@@ -377,6 +430,10 @@ static int __init led_pwm_init(void)
 	if (status != 0)
 		goto release_pwm_regs;
 
+	status = setup_sysfs();
+	if (status != 0)
+		goto remove_chrdev;
+
 	for (i = 0; i < NUM_LEDS; i++)
 		set_led(led_regs, i, PWM_MAX);
 
@@ -385,6 +442,8 @@ static int __init led_pwm_init(void)
 
 	return 0;
 
+remove_chrdev:
+	remove_char_dev();
 release_pwm_regs:
 	unmap_registers(PWM_REG_BASE, PWM_REG_SIZE, &led_regs);
 
@@ -404,6 +463,7 @@ static void __exit led_pwm_exit(void)
 	for (i = 0; i < PWM_NUM_CHANNELS; i++)
 		set_led(led_regs, i, 0);
 
+	remove_sysfs_dev();
 	remove_char_dev();
 	unmap_registers(PWM_REG_BASE, PWM_REG_SIZE, &led_regs);
 }
