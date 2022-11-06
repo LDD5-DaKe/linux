@@ -24,48 +24,40 @@ Schnittstelle ausgetauscht.
 Beim Schreiben werden die Daten an die Ausgangs-FIFO angefügt. Sollte die FIFO
 voll sein, kann der Fehlercode `EBUSY` retourniert werden, sodass der
 Schreibvorgang später wiederholt wird.
+Alternativ kann der Treiber auch blockieren, bis Platz im FIFO ist.
 
 Beim Lesen werden die Daten von der Eingangs-FIFO gelesen und in den Userspace
 kopiert (max. Puffergröße).
 
 ### 2. PWM-Controller
 
-#### Schreiben
-Der Schreibzugriff ist strukturiert: der erste Teil der in der write-Funktion
-empfangenen Daten ist die PWM-Kanal-Nummer, der Rest ist der zu setzende Wert
-dieses Kanals.
+Da hier viele separate Register mit geringer Datenmenge angesprochen werden
+müssen bietet sich eine sysfs Schnittstelle an.
 
-#### Lesen (optional)
-Sollte es erforderlich sein, die aktuellen Werte zu lesen, werden im
-einfachsten Fall die Werte der Duty-Cycle-Register gemeinsam an den Aufrufer
-übermittelt.
-
-Ist die Zahl der Kanäle zu groß, könnte zuerst nur die Kanalnummer an die
-Schreib-Schnittstelle übermittelt werden (ohne Wert für den Duty-Cycle). Im
-darauffolgenden Lesezugriff wird der Wert des geforderten Kanals übermittelt.
+Es wird für jeden PWM Kanal ein file im sysfs erstellt, das die PWM Einstellung
+dieses Kanals erlaubt. Sind die Register des PWM Controllers auch lesbar, kann
+auch das Lesen der Register über sysfs implementiert werden.
 
 ### 3. Testbild-Generator
 
 #### Ein Konfigurationsregister
-Die Bits des übertragenen Bytes haben spezielle Bedeutung (vgl.
-Mikrocontroller). Dies kann in der Schreib-Schnittstelle interpretiert und in
-der Lese-Schnittstelle wieder zusammengebaut werden.
 
-Optional könnte auch eine Bitmaske übergeben werden, welche die zu beachtenden
-Bits kennzeichnet.
+Hier bietet sich wieder eine sysfs Schnittstelle an. Für einfaches Arbeiten mit
+der Schnittstelle, wird jedes zusammengehörige Feld des Registers als separate
+Datei dargestellt. Für schnellere Zugriffe kann auch noch eine Datei für das
+gesamte Register erstellt werden, dem der Wert in hex geschrieben wird um
+Menschenlesbar zu sein.
 
 #### Mehrere Konfigurationsregister
 
-Ähnlich zum PWM-Controller, Strukturierung des Datenstroms in Addresse +
-Registerwert.
+Wie bei einem Register, allerdings kann pro Register ein Unterordner im sysfs angelegt werden.
 
 #### großer Speicherbereich, Testbild zur Laufzeit konfigurierbar
 
-Bereitstellung von Funktionen zum kompletten Neuschreiben des Speicherbereichs
-oder gezieltem Überschreiben einer Sub-Region, gekennzeichnet durch eine
-Startadresse.
+Der Speicherbereich für das Testbild wird als Character Device implementiert,
+dadurch kann die Bildatei einfach verändert werden und auch schnelles streaming
+wäre möglich.
 
-Lesen ist bei dieser Schnittstelle wenig sinnvoll (Konfigurationsdaten werden
-bereits vom Userspace vorgegeben). Die Ausgabe des Testbilds erfolgt
-Hardwaremäßig auf anderem Weg (z.B. über HDMI, direkt aus dem FPGA heraus).
-
+Für etwaige Kontroll und Konfigurationsregister, die zusätzlich existieren,
+werden sysfs Dateien implementiert, damit müssen diese Zugriffe nicht über die
+gleiche Schnittstelle wie die Bildatei gesendet werden.
