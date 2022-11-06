@@ -79,11 +79,11 @@ static struct device *cdev_device;
 // -----------------------------------------------------------------
 // sysfs configuration
 
-static ssize_t ledpwm_show_led9_off(struct device *dev,
+static ssize_t led9_off_show(struct device *dev,
 				    struct device_attribute *attr, char *buf);
 
 static struct device *sysfs_root_device;
-static DEVICE_ATTR(led9_off, S_IRUGO, ledpwm_show_led9_off, NULL);
+static DEVICE_ATTR(led9_off, 0444, led9_off_show, NULL);
 
 static int ledpwm_open(struct inode *inode, struct file *filep)
 {
@@ -321,7 +321,7 @@ static void remove_char_dev(void)
 			&device_data.led_regs);
 }
 
-static ssize_t ledpwm_show_led9_off(struct device *dev,
+static ssize_t led9_off_show(struct device *dev,
 				    struct device_attribute *attr, char *buf)
 {
 	struct ledpwm *data = dev->driver_data;
