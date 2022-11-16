@@ -11,8 +11,6 @@
 #include <linux/errno.h>
 #include <linux/ioport.h>
 #include <linux/io.h>
-#include <linux/jiffies.h>
-#include <linux/timer.h>
 
 #include <linux/fs.h>
 #include <linux/cdev.h>
@@ -23,6 +21,7 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/miscdevice.h>
+#include <linux/atomic.h>
 
 // -----------------------------------------------------------------
 // device tree configuration
@@ -49,6 +48,8 @@ static struct platform_driver ledpwm_driver = {
 };
 
 module_platform_driver(ledpwm_driver);
+
+#define NAME_BUFFER_SIZE 10
 
 // -----------------------------------------------------------------
 // PWM Channel definitions for the character device
@@ -187,9 +188,12 @@ int set_led(u32 __iomem *reg_base, uint32_t value)
 
 int ledpwm_probe(struct platform_device *pdev)
 {
+	static atomic_t ledpwm_no = ATOMIC_INIT(-1);
 	struct ledpwm_dev *ledpwm;
 	struct resource *regs;
 	int status;
+	int no;
+	char *name;
 
 	ledpwm =
 		devm_kzalloc(&pdev->dev, sizeof(struct ledpwm_dev), GFP_KERNEL);
@@ -210,7 +214,15 @@ int ledpwm_probe(struct platform_device *pdev)
 		return -EFAULT;
 	}
 
-	ledpwm->misc.name = "ledpwm";
+	no = atomic_inc_return(&ledpwm_no);
+	name = devm_kzalloc(&pdev->dev, NAME_BUFFER_SIZE, GFP_KERNEL);
+	if (!name) {
+		dev_err(&pdev->dev, "could not request storage for the name buffer");
+		return -ENOMEM;
+	}
+
+	snprintf(name, NAME_BUFFER_SIZE, "led%d", no);
+	ledpwm->misc.name = name;
 	ledpwm->misc.minor = MISC_DYNAMIC_MINOR;
 	ledpwm->misc.fops = &ledpwm_fops;
 	ledpwm->misc.parent = &pdev->dev;
@@ -237,3 +249,4 @@ MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Driver for the LED PWM component of the DE1-SoC Computer");
 MODULE_AUTHOR("Alexander Daum <alexander.daum@mailbox.org>");
 MODULE_AUTHOR("Matthias Kern <kern_matthias@gmx.at>");
+

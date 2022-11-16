@@ -42,7 +42,7 @@
 		};
 		ledpwm9: ledpwm@0xff2030a4 {
 			compatible = "ldd,ledpwm";
-			reg = <0xff2030a5 0x1>;
+			reg = <0xff2030a4 0x1>;
 		};
 	};
 };
