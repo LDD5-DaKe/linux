@@ -24,41 +24,71 @@
 #include <linux/platform_device.h>
 #include <linux/miscdevice.h>
 
-#define PWM_MAX 0x7FFU
+// -----------------------------------------------------------------
+// device tree configuration
+static const struct of_device_id ledpwm_of_match[] = {
+	{
+		.compatible = "ldd,ledpwm",
+	},
+	{}
+};
 
-#define MULTIPLE_WRITE_DELAY 200
+MODULE_DEVICE_TABLE(of, ledpwm_of_match);
 
-static int set_led(size_t __iomem *reg_base, int ledNr, uint32_t value);
+static int ledpwm_probe(struct platform_device *pdev);
+static int ledpwm_remove(struct platform_device *pdev);
+
+static struct platform_driver ledpwm_driver = {
+	.driver = {
+		.name = "ledpwm",
+		.owner = THIS_MODULE,
+		.of_match_table = of_match_ptr(ledpwm_of_match),
+	},
+	.probe = ledpwm_probe,
+	.remove = ledpwm_remove,
+};
+
+module_platform_driver(ledpwm_driver);
 
 // -----------------------------------------------------------------
 // PWM Channel definitions for the character device
-
+#define PWM_MAX 0x7FFU
 #define CDEV_MAX_USERDATA 100
+#define MULTIPLE_WRITE_DELAY 200
 
 #define TO_PWM_VALUE(x) ((x)*PWM_MAX / CDEV_MAX_USERDATA)
 #define FROM_PWM_VALUE(x) (u8)((x)*CDEV_MAX_USERDATA / PWM_MAX)
 
+static int set_led(size_t __iomem *reg_base, uint32_t value);
+
 // -----------------------------------------------------------------
 // character device configuration
-
-struct ledpwm {
+struct ledpwm_dev {
 	u32 __iomem *led_regs;
-	struct cdev cdev;
+	struct miscdevice misc;
 };
 
-static struct ledpwm device_data;
-static dev_t device_number;
-static struct class *cdev_class;
-static struct device *cdev_device;
+static ssize_t ledpwm_read(struct file *filep, char __user *buf, size_t count,
+			   loff_t *offp);
+static ssize_t ledpwm_write(struct file *filep, const char __user *buf,
+			    size_t count, loff_t *offp);
+
+// create the structure with the file pointers
+static struct file_operations const ledpwm_fops = {
+	.read = ledpwm_read,
+	.write = ledpwm_write,
+};
 
 static ssize_t ledpwm_read(struct file *filep, char __user *buf, size_t count,
 			   loff_t *offp)
 {
 	u8 pwm_channel;
-	struct ledpwm *data = filep->private_data;
+	struct ledpwm_dev *data;
 
-	printk(KERN_INFO "In %s, count: %d, offp: %lld\n", __func__, count,
-	       *offp);
+	data = container_of(filep->private_data, struct ledpwm_dev, misc);
+
+	dev_info(data->misc.parent, "In %s, count: %d, offp: %lld\n", __func__,
+		 count, *offp);
 
 	// if the byte has already been copied to the userspace
 	if (*offp >= 1)
@@ -73,7 +103,8 @@ static ssize_t ledpwm_read(struct file *filep, char __user *buf, size_t count,
 
 	// copy_to_user returns uncopied bytes, if not 0, an error occurred
 	if (copy_to_user(buf, &pwm_channel, 1)) {
-		printk(KERN_ERR "unable to copy data to userspace\n");
+		dev_err(data->misc.parent,
+			"unable to copy data to userspace\n");
 		return -EFAULT;
 	}
 
@@ -87,30 +118,36 @@ static ssize_t ledpwm_write(struct file *filep, const char __user *buf,
 {
 	u8 userdata;
 	size_t bytes_written = 0;
-	struct ledpwm *data = filep->private_data;
+	struct ledpwm_dev *data;
 
-	printk(KERN_INFO "In %s, count: %d, offp: %lld\n", __func__, count,
-	       *offp);
+	data = container_of(filep->private_data, struct ledpwm_dev, misc);
+
+	if (!data)
+		return -EFAULT;
+
+	dev_info(data->misc.parent, "In %s, count: %d, offp: %lld\n", __func__,
+		 count, *offp);
 
 	for (bytes_written = 0; bytes_written < count;) {
 		// load the current byte from the userspace
 		// (bulk transfer would be more efficient)
 		if (copy_from_user(&userdata, &(buf[bytes_written]), 1)) {
-			printk(KERN_ERR "unable to copy data from userspace\n");
+			dev_err(data->misc.parent,
+				"unable to copy data from userspace\n");
 			return -EFAULT;
 		}
 
 		// verify that the received userdata is valid
 		if (userdata > CDEV_MAX_USERDATA) {
-			printk(KERN_ERR
-			       "received invalid userdata: %d, will skip this value",
-			       userdata);
-			set_led(data->led_regs, 0, 0);
+			dev_err(data->misc.parent,
+				"received invalid userdata: %d, will skip this value",
+				userdata);
+			set_led(data->led_regs, 0);
 			return -EINVAL;
 		}
 
 		// set the value
-		set_led(data->led_regs, 0, TO_PWM_VALUE(userdata));
+		set_led(data->led_regs, TO_PWM_VALUE(userdata));
 
 		// wait for 200ms if there are more bytes to write
 		if (++bytes_written < count)
@@ -120,160 +157,8 @@ static ssize_t ledpwm_write(struct file *filep, const char __user *buf,
 	return bytes_written;
 }
 
-// create the structure with the file pointers
-static struct file_operations const fops = {
-	.read = ledpwm_read,
-	.write = ledpwm_write,
-};
-
 // -----------------------------------------------------------------
 // misc functions
-
-/**
- * Requests and maps the PWM I/O registers.
- * The ioremapped registers are stored in the static variable led_regs
- *
- * @param base base address of the register to remap
- *
- * @param size size of the memory region to remap (in bytes)
- *
- * @param memory [out] remapped memory region
- *
- * @return 0 if OK, an error code otherwise.
- *         necessary cleanup is already done
- */
-static int map_registers(resource_size_t const base, resource_size_t const size,
-			 size_t **memory)
-{
-	int ret = 0;
-
-	if (!request_mem_region(base, size, "PWM Regs")) {
-		printk(KERN_ERR "Unable to request mem region\n");
-		return -EBUSY;
-	}
-
-	*memory = (size_t *)ioremap(base, size);
-	if (!memory) {
-		printk(KERN_ERR "Unable to ioremap PWM Registers\n");
-		ret = -EBUSY;
-		goto release;
-	}
-
-	goto end;
-
-release:
-	release_mem_region(base, size);
-
-end:
-	return ret;
-}
-
-/**
- * unmap and release a mapped memory region
- *
- * @param base base address of the mapped region
- *
- * @param size size of the mapped region (in bytes)
- *
- * @param memory [inout] pointer to the remapped memory region,
- *               will be set to NULL
- */
-static void unmap_registers(resource_size_t const base, resource_size_t size,
-			    size_t **memory)
-{
-	iounmap((void *)*memory);
-	*memory = (size_t *)NULL;
-	release_mem_region(base, size);
-}
-
-/**
- * allocate + initialize character device + setup udev
- */
-static int setup_char_dev(void)
-{
-	int status;
-
-	// map the 9th pwm channel into the device data struct
-	status = map_registers(CDEV_PWM_REG_BASE, CDEV_PWM_REG_SIZE,
-			       &(device_data.led_regs));
-	if (status != 0) {
-		printk(KERN_ERR
-		       "Unable to map pwm channel for the character device\n");
-		goto exit;
-	}
-
-	// allocate character device
-	status = alloc_chrdev_region(&device_number, 0, 1, "ledpwm");
-	if (status < 0) {
-		printk(KERN_ERR "Unable to allocate chardev region\n");
-		goto release_mapped_region;
-	}
-
-	// init structure
-	cdev_init(&device_data.cdev, &fops);
-	device_data.cdev.owner = THIS_MODULE;
-
-	// and add device
-	status = cdev_add(&device_data.cdev, device_number, 1);
-	if (status < 0) {
-		printk(KERN_ERR "Unable to add cdev\n");
-		goto release_chardev;
-	}
-
-	// create device file
-	cdev_class = class_create(THIS_MODULE, "ldd5");
-	if (IS_ERR(cdev_class)) {
-		printk(KERN_ERR "Unable to create class\n");
-		status = -EEXIST;
-		goto remove_device;
-	}
-
-	cdev_device = device_create(cdev_class, NULL, device_number,
-				    &device_data, "ledpwm");
-
-	if (IS_ERR(cdev_device)) {
-		printk(KERN_ERR "Unable to create device\n");
-		status = -EEXIST;
-		goto remove_device_class;
-	}
-
-	// everything ok
-	return 0;
-
-remove_device_class:
-	class_destroy(cdev_class);
-
-remove_device:
-	cdev_del(&device_data.cdev);
-
-release_chardev:
-	unregister_chrdev_region(device_number, 1);
-
-release_mapped_region:
-	unmap_registers(CDEV_PWM_REG_BASE, CDEV_PWM_REG_SIZE,
-			&(device_data.led_regs));
-
-exit:
-	return status;
-}
-
-static void remove_char_dev(void)
-{
-	// remove device file
-	device_destroy(cdev_class, device_number);
-	class_destroy(cdev_class);
-
-	// release resources
-	cdev_del(&device_data.cdev);
-	unregister_chrdev_region(device_number, 1);
-
-	// switch off the led
-	set_led(device_data.led_regs, 0, 0);
-
-	// unmap the pwm channel
-	unmap_registers(CDEV_PWM_REG_BASE, CDEV_PWM_REG_SIZE,
-			&device_data.led_regs);
-}
 
 /**
  * Set the value (brightness) of a single LED PWM Channel
@@ -284,18 +169,15 @@ static void remove_char_dev(void)
  *
  * @return -EINVAL if ledNr or value are invalid, 0 otherwise
  */
-int set_led(u32 __iomem *reg_base, int ledNr, uint32_t value)
+int set_led(u32 __iomem *reg_base, uint32_t value)
 {
 	if (reg_base == NULL)
-		return -EINVAL;
-
-	if (ledNr < 0 || ledNr >= PWM_NUM_CHANNELS)
 		return -EINVAL;
 
 	if (value > PWM_MAX)
 		return -EINVAL;
 
-	iowrite32(value, reg_base + ledNr);
+	iowrite32(value, reg_base);
 
 	return 0;
 }
@@ -303,44 +185,55 @@ int set_led(u32 __iomem *reg_base, int ledNr, uint32_t value)
 // -----------------------------------------------------------------
 // module load/unload functions
 
-static int __init led_pwm_probe(struct platform_device *pdev)
+int ledpwm_probe(struct platform_device *pdev)
 {
+	struct ledpwm_dev *ledpwm;
+	struct resource *regs;
 	int status;
-	int i;
 
-	printk(KERN_INFO "Loading PWM Driver\n");
+	ledpwm =
+		devm_kzalloc(&pdev->dev, sizeof(struct ledpwm_dev), GFP_KERNEL);
+	if (!ledpwm) {
+		dev_err(&pdev->dev, "could not allocate memory");
+		return -ENOMEM;
+	}
 
-	// map the lower 8 pwm channels to be accessed by led_regs
-	status = map_registers(PWM_REG_BASE, PWM_REG_SIZE, &led_regs);
-	if (status != 0)
-		goto exit;
+	regs = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (!regs) {
+		dev_err(&pdev->dev, "could not allocate memory");
+		return -EFAULT;
+	}
 
-	// setup the character device config
-	status = setup_char_dev();
-	if (status != 0)
-		goto release_pwm_regs;
+	ledpwm->led_regs = devm_ioremap_resource(&pdev->dev, regs);
+	if (!ledpwm->led_regs) {
+		dev_err(&pdev->dev, "error remapping the iomemory");
+		return -EFAULT;
+	}
 
-	set_led(led_regs, i, PWM_MAX);
+	ledpwm->misc.name = "ledpwm";
+	ledpwm->misc.minor = MISC_DYNAMIC_MINOR;
+	ledpwm->misc.fops = &ledpwm_fops;
+	ledpwm->misc.parent = &pdev->dev;
+	status = misc_register(&ledpwm->misc);
+	if (status) {
+		dev_err(&pdev->dev, "unable to register the device");
+		return status;
+	}
 
 	return 0;
-
-remove_chrdev:
-	remove_char_dev();
-release_pwm_regs:
-	unmap_registers(PWM_REG_BASE, PWM_REG_SIZE, &led_regs);
-
-exit:
-	return status;
 }
 
-static void __exit led_pwm_remove(struct platform_device *pdev)
+int ledpwm_remove(struct platform_device *pdev)
 {
-	printk(KERN_INFO "Unloading PWM Driver\n");
+	struct ledpwm_dev *ledpwm;
 
-	remove_char_dev();
-	unmap_registers(PWM_REG_BASE, PWM_REG_SIZE, &led_regs);
+	ledpwm = platform_get_drvdata(pdev);
+	misc_deregister(&ledpwm->misc);
+	platform_set_drvdata(pdev, NULL);
+	return 0;
 }
 
+MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Driver for the LED PWM component of the DE1-SoC Computer");
 MODULE_AUTHOR("Alexander Daum <alexander.daum@mailbox.org>");
 MODULE_AUTHOR("Matthias Kern <kern_matthias@gmx.at>");
