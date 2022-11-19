@@ -232,6 +232,8 @@ int ledpwm_probe(struct platform_device *pdev)
 		return status;
 	}
 
+    platform_set_drvdata(pdev, ledpwm);
+
 	return 0;
 }
 
@@ -239,7 +241,10 @@ int ledpwm_remove(struct platform_device *pdev)
 {
 	struct ledpwm_dev *ledpwm;
 
+
 	ledpwm = platform_get_drvdata(pdev);
+    // set LED to 0 on exit
+    set_led(ledpwm->led_regs, 0);
 	misc_deregister(&ledpwm->misc);
 	platform_set_drvdata(pdev, NULL);
 	return 0;
