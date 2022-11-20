@@ -1,1 +1,16 @@
-This is a test and adds documentation for the ldd ledpwm peripheral
+* HSD/LDD5 FH-Hagenberg ledpwm device controller
+
+This file describes the bindings for the ledpwm device for
+LDD5 assignment 3.
+The instantiated driver will be able to control the brightness of
+a single led.
+
+Required properties for the driver:
+- reg: address of the register of the led to control, length should always be 1
+- compatible: must be "ldd,ledpwm"!
+
+Example:
+ledpwm0: ledpwm@0xff203080 {
+	compatible = "ldd,ledpwm";
+	reg = <0xff203080 0x1>;
+};
