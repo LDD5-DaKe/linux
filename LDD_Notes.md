@@ -1,3 +1,21 @@
+# zu Aufgabe 1
+
+## b) Behandlung von Werten ausserhalb des Wertebereichs
+
+Die Behandlung von Werten ausserhalb des Wertebereichs ist gleich wie
+bei Übung 2 Mal:
+
+> Wird ein Wert ausserhalb des Wertebereichs erhalten (> 100), wird
+die Ausgabe der Werte abgebrochen. Die LED wird auf einen sicheren
+Wert (0) zurückgesetzt und dem Userspace wird der Fehlercode `EINVAL`
+rückgegeben.
+
+> Diese Herangehensweise wurde gewählt, um den Benutzer möglichst laut und
+rasch auf eine falsche Eingabe hinzuweisen.
+
+> Das Rücksetzen auf einen sicheren Wert ist je nach tatsächlicher Anwendung
+sinnvoll oder gefährlich (z.B. bei der Ansteuerung eines Servo-Motors).
+
 # Fragen
 
 ## a)

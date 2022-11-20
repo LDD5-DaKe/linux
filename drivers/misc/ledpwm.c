@@ -217,7 +217,8 @@ int ledpwm_probe(struct platform_device *pdev)
 	no = atomic_inc_return(&ledpwm_no);
 	name = devm_kzalloc(&pdev->dev, NAME_BUFFER_SIZE, GFP_KERNEL);
 	if (!name) {
-		dev_err(&pdev->dev, "could not request storage for the name buffer");
+		dev_err(&pdev->dev,
+			"could not request storage for the name buffer");
 		return -ENOMEM;
 	}
 
@@ -232,7 +233,7 @@ int ledpwm_probe(struct platform_device *pdev)
 		return status;
 	}
 
-    platform_set_drvdata(pdev, ledpwm);
+	platform_set_drvdata(pdev, ledpwm);
 
 	return 0;
 }
@@ -241,10 +242,9 @@ int ledpwm_remove(struct platform_device *pdev)
 {
 	struct ledpwm_dev *ledpwm;
 
-
 	ledpwm = platform_get_drvdata(pdev);
-    // set LED to 0 on exit
-    set_led(ledpwm->led_regs, 0);
+	// set LED to 0 on exit
+	set_led(ledpwm->led_regs, 0);
 	misc_deregister(&ledpwm->misc);
 	platform_set_drvdata(pdev, NULL);
 	return 0;
@@ -254,4 +254,3 @@ MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Driver for the LED PWM component of the DE1-SoC Computer");
 MODULE_AUTHOR("Alexander Daum <alexander.daum@mailbox.org>");
 MODULE_AUTHOR("Matthias Kern <kern_matthias@gmx.at>");
-
