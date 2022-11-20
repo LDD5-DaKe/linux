@@ -1,0 +1,48 @@
+// SPDX-License-Identifier: GPL-2.0+
+
+#include "socfpga_cyclone5_de1soc.dts"
+
+/ {
+	soc {
+		ledpwm0: ledpwm@0xff203080 {
+			compatible = "ldd,ledpwm";
+			reg = <0xff203080 0x1>;
+		};
+		ledpwm1: ledpwm@0xff203084 {
+			compatible = "ldd,ledpwm";
+			reg = <0xff203084 0x1>;
+		};
+		ledpwm2: ledpwm@0xff203088 {
+			compatible = "ldd,ledpwm";
+			reg = <0xff203088 0x1>;
+		};
+		ledpwm3: ledpwm@0xff20308c {
+			compatible = "ldd,ledpwm";
+			reg = <0xff20308c 0x1>;
+		};
+		ledpwm4: ledpwm@0xff203090 {
+			compatible = "ldd,ledpwm";
+			reg = <0xff203090 0x1>;
+		};
+		ledpwm5: ledpwm@0xff203094 {
+			compatible = "ldd,ledpwm";
+			reg = <0xff203094 0x1>;
+		};
+		ledpwm6: ledpwm@0xff203098 {
+			compatible = "ldd,ledpwm";
+			reg = <0xff203098 0x1>;
+		};
+		ledpwm7: ledpwm@0xff20309c {
+			compatible = "ldd,ledpwm";
+			reg = <0xff20309c 0x1>;
+		};
+		ledpwm8: ledpwm@0xff2030a0 {
+			compatible = "ldd,ledpwm";
+			reg = <0xff2030a0 0x1>;
+		};
+		ledpwm9: ledpwm@0xff2030a4 {
+			compatible = "ldd,ledpwm";
+			reg = <0xff2030a4 0x1>;
+		};
+	};
+};
