@@ -69,7 +69,7 @@ struct pushbutton_dev {
 	struct miscdevice misc;
 	struct mutex mutex;
 	struct kfifo fifo;
-	struct completion signal;
+	struct wait_queue_head queue;
 };
 
 static ssize_t pushbutton_read(struct file *filep, char __user *buf,
@@ -104,7 +104,7 @@ static ssize_t pushbutton_read(struct file *filep, char __user *buf,
 
 	if (kfifo_get(&data->fifo, &readbyte) == 0) {
 		// fifo was empty
-		if (wait_for_completion_interruptible(&data->signal)) {
+		if (wait_event_interruptible(data->queue, kfifo_len(&data->fifo) != 0)) {
 			dev_info(data->misc.parent, "wait interrupted\n");
 			return -ERESTARTSYS;
 		}
@@ -187,7 +187,7 @@ int pushbutton_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	};
 
-	init_completion(&pushbutton->signal);
+	init_waitqueue_head(&pushbutton->queue);
 	mutex_init(&pushbutton->mutex);
 
 	pushbutton->misc.name = "pushbutton_event";
@@ -239,8 +239,9 @@ static irqreturn_t button_handler(int irqnum, void *devdata)
 	}
 	// get which button is pressed
 	readdata = ioread32(&data->button_regs->data);
-	kfifo_put(&data->fifo, (u8)readdata);
-	complete(&data->signal);
+
+	kfifo_put(&data->fifo, (u8)(readdata | edges));
+	wake_up_interruptible(&data->queue);
 
 	// clear interrupt again by writing edge_capture register
 	iowrite32(edges, &data->button_regs->edge_capture);
