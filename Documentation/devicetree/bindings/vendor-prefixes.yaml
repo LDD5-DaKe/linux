@@ -511,6 +511,8 @@ patternProperties:
     description: Lantiq Semiconductor
   "^lattice,.*":
     description: Lattice Semiconductor
+  "^ldd,.*":
+    description: FH-Hagenberg, HSD, LDD5
   "^leez,.*":
     description: Leez
   "^lego,.*":
