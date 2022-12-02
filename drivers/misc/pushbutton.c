@@ -88,7 +88,8 @@ static struct file_operations const pushbutton_fops = {
 static ssize_t pushbutton_read(struct file *filep, char __user *buf,
 			       size_t count, loff_t *offp)
 {
-	u8 readbyte;
+	u8 read_data[FIFO_SIZE];
+    size_t read = 0;
 	struct pushbutton_dev *data =
 		container_of(filep->private_data, struct pushbutton_dev, misc);
 
@@ -102,28 +103,25 @@ static ssize_t pushbutton_read(struct file *filep, char __user *buf,
 	if (count < 1)
 		return -ETOOSMALL;
 
-	if (kfifo_get(&data->fifo, &readbyte) == 0) {
-		// fifo was empty
-		if (wait_event_interruptible(data->queue, kfifo_len(&data->fifo) != 0)) {
+    // If the fifo is empty -> wait until data has arrived
+    if (kfifo_is_empty(&data->fifo)) {
+		if (wait_event_interruptible(data->queue, !kfifo_is_empty(&data->fifo))) {
 			dev_info(data->misc.parent, "wait interrupted\n");
 			return -ERESTARTSYS;
 		}
-		if (kfifo_get(&data->fifo, &readbyte) == 0) {
-			dev_err(data->misc.parent,
-				"FIFO still empty after completion!\n");
-			return -EFAULT;
-		}
-	}
+    }
 
-	if (copy_to_user(buf, &readbyte, sizeof(readbyte))) {
+    read = kfifo_out(&data->fifo, read_data, FIFO_SIZE);
+
+	if (copy_to_user(buf, read_data, read)) {
 		dev_err(data->misc.parent,
 			"unable to copy data to userspace\n");
 		return -EFAULT;
 	}
 
 	// increment the offset pointer
-	*offp += sizeof(readbyte);
-	return sizeof(readbyte);
+	*offp += read;
+	return read;
 }
 
 static ssize_t pushbutton_open(struct inode *inode, struct file *filep)
