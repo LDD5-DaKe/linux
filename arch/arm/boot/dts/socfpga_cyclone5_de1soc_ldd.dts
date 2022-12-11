@@ -1,0 +1,15 @@
+// SPDX-License-Identifier: GPL-2.0+
+
+#include "socfpga_cyclone5_de1soc.dts"
+
+/ {
+	soc {
+		pushbuttons: uio_pdrv_genirq@0xff200050 {
+			compatible = "generic_uio";
+			reg = <0xff200000 0x1000>;
+			// level triggered shared peripheral interrupt
+			interrupts = <0x0 0x29 0x4>;
+			interrupt-parent = <&intc>;
+		};
+	};
+};
