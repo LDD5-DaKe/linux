@@ -4,9 +4,9 @@
 
 / {
 	soc {
-		pushbuttons: uio_pdrv_genirq@0xff200050 {
-			compatible = "generic_uio";
-			reg = <0xff200000 0x1000>;
+		pushbuttons: uio_pdrv_genirq@0xff200000 {
+			compatible = "generic-uio";
+			reg = <0xff200000 0x4000>;
 			// level triggered shared peripheral interrupt
 			interrupts = <0x0 0x29 0x4>;
 			interrupt-parent = <&intc>;
